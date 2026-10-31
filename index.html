@@ -1,0 +1,947 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>KHANDELWAL FOOD MART - Stock & Price Portal</title>
+
+  <!-- PWA Manifest & Meta Tags -->
+  <link rel="manifest" href="./manifest.json">
+  <meta name="theme-color" content="#0f172a">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/3081/3081840.png">
+
+  <!-- SheetJS & Barcode Scanner -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+
+    body {
+      background-color: #f1f5f9;
+      color: #1e293b;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ---------------- LOGIN ---------------- */
+    #loginScreen {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      padding: 20px;
+      background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+    }
+
+    .login-card {
+      background: #ffffff;
+      padding: 32px 24px;
+      border-radius: 18px;
+      width: 100%;
+      max-width: 380px;
+      box-shadow: 0 15px 35px rgba(0,0,0,0.3);
+      text-align: center;
+    }
+
+    .login-brand {
+      font-size: 20px;
+      font-weight: 900;
+      color: #0f172a;
+      margin-bottom: 4px;
+    }
+
+    .login-sub {
+      font-size: 13px;
+      color: #64748b;
+      margin-bottom: 22px;
+    }
+
+    .input-phone {
+      width: 100%;
+      padding: 14px 16px;
+      font-size: 18px;
+      border: 2px solid #cbd5e1;
+      border-radius: 10px;
+      margin-bottom: 16px;
+      text-align: center;
+      font-weight: 700;
+      letter-spacing: 2px;
+      outline: none;
+    }
+
+    .input-phone:focus {
+      border-color: #2563eb;
+    }
+
+    .btn-login {
+      width: 100%;
+      padding: 14px;
+      background: #2563eb;
+      color: #ffffff;
+      border: none;
+      border-radius: 10px;
+      font-size: 16px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    /* ---------------- APP UI ---------------- */
+    #appScreen {
+      display: none;
+      flex-direction: column;
+      flex: 1;
+    }
+
+    header {
+      background: #0f172a;
+      color: #ffffff;
+      padding: 14px 18px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.15);
+      position: sticky;
+      top: 0;
+      z-index: 40;
+    }
+
+    .brand-title {
+      font-size: 17px;
+      font-weight: 800;
+      letter-spacing: 0.5px;
+    }
+
+    .user-pill {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .role-badge {
+      font-size: 11px;
+      font-weight: 800;
+      padding: 4px 10px;
+      border-radius: 20px;
+      text-transform: uppercase;
+    }
+
+    .role-owner {
+      background: #f59e0b;
+      color: #78350f;
+    }
+
+    .role-staff {
+      background: #3b82f6;
+      color: #ffffff;
+    }
+
+    .btn-logout {
+      background: transparent;
+      color: #94a3b8;
+      border: 1px solid #475569;
+      padding: 4px 10px;
+      font-size: 12px;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+
+    .app-container {
+      display: flex;
+      flex: 1;
+      flex-direction: column;
+      max-width: 600px;
+      margin: 0 auto;
+      width: 100%;
+      padding: 16px;
+      gap: 14px;
+    }
+
+    /* PWA Install Banner */
+    #installBanner {
+      display: none;
+      background: #2563eb;
+      color: white;
+      padding: 12px 16px;
+      border-radius: 10px;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    .btn-install {
+      background: white;
+      color: #2563eb;
+      border: none;
+      padding: 6px 14px;
+      border-radius: 6px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    /* Admin Upload Box */
+    .admin-upload-box {
+      background: #eff6ff;
+      border: 2px dashed #2563eb;
+      border-radius: 12px;
+      padding: 16px;
+      text-align: center;
+      cursor: pointer;
+      position: relative;
+    }
+
+    .admin-upload-box input {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      opacity: 0;
+      cursor: pointer;
+    }
+
+    /* Search & Scan Controls */
+    .search-row {
+      display: flex;
+      gap: 8px;
+      position: relative;
+    }
+
+    .search-input {
+      flex: 1;
+      padding: 14px 16px;
+      font-size: 16px;
+      border: 2px solid #cbd5e1;
+      border-radius: 10px;
+      outline: none;
+      background: #ffffff;
+    }
+
+    .search-input:focus {
+      border-color: #2563eb;
+    }
+
+    .btn-scan-camera {
+      background: #0f172a;
+      color: white;
+      border: none;
+      padding: 0 16px;
+      border-radius: 10px;
+      cursor: pointer;
+      font-size: 20px;
+    }
+
+    .results-dropdown {
+      position: absolute;
+      top: 105%;
+      left: 0;
+      right: 0;
+      background: white;
+      border: 1px solid #cbd5e1;
+      border-radius: 10px;
+      max-height: 340px;
+      overflow-y: auto;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.15);
+      z-index: 50;
+      display: none;
+    }
+
+    .result-item {
+      padding: 12px 14px;
+      border-bottom: 1px solid #f1f5f9;
+      cursor: pointer;
+    }
+
+    .result-item:hover {
+      background: #eff6ff;
+    }
+
+    .res-name {
+      font-weight: 700;
+      font-size: 14px;
+      color: #0f172a;
+    }
+
+    .res-meta {
+      font-size: 12px;
+      color: #64748b;
+      margin-top: 2px;
+    }
+
+    /* Product Display Card */
+    .detail-card {
+      background: #ffffff;
+      border-radius: 14px;
+      padding: 20px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.06);
+      border: 1px solid #e2e8f0;
+      display: none;
+    }
+
+    .product-title-large {
+      font-size: 18px;
+      font-weight: 800;
+      color: #0f172a;
+      line-height: 1.3;
+      margin-bottom: 6px;
+    }
+
+    .product-barcode-pill {
+      display: inline-block;
+      font-size: 12px;
+      font-weight: 600;
+      color: #64748b;
+      background: #f1f5f9;
+      padding: 2px 8px;
+      border-radius: 6px;
+      margin-bottom: 16px;
+    }
+
+    .pricing-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    .price-box {
+      padding: 14px;
+      border-radius: 10px;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .box-sale { background: #eff6ff; border: 1.5px solid #bfdbfe; }
+    .box-mrp { background: #f8fafc; border: 1.5px solid #e2e8f0; }
+    .box-purchase { background: #fef2f2; border: 1.5px solid #fecaca; }
+    .box-margin { background: #f0fdf4; border: 1.5px solid #bbf7d0; }
+
+    .price-label {
+      font-size: 11px;
+      font-weight: 700;
+      color: #64748b;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .price-value {
+      font-size: 24px;
+      font-weight: 900;
+      margin-top: 4px;
+    }
+
+    .val-sale { color: #1d4ed8; }
+    .val-mrp { color: #475569; }
+    .val-purchase { color: #b91c1c; }
+    .val-margin { color: #15803d; }
+
+    /* Modal Backdrop */
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(15, 23, 42, 0.65);
+      display: none;
+      justify-content: center;
+      align-items: center;
+      z-index: 90;
+      padding: 20px;
+    }
+
+    .modal-box {
+      background: white;
+      border-radius: 16px;
+      width: 100%;
+      max-width: 440px;
+      padding: 20px;
+      max-height: 85vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .mrp-options-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      overflow-y: auto;
+      margin: 14px 0;
+    }
+
+    .mrp-option-card {
+      border: 2px solid #e2e8f0;
+      border-radius: 10px;
+      padding: 12px 14px;
+      cursor: pointer;
+    }
+
+    .mrp-option-card:hover {
+      border-color: #2563eb;
+      background: #eff6ff;
+    }
+
+    .btn-close-modal {
+      background: #f1f5f9;
+      color: #475569;
+      border: none;
+      padding: 10px;
+      border-radius: 8px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    #scannerModal {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.85);
+      z-index: 100;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- 1. LOGIN -->
+  <div id="loginScreen">
+    <div class="login-card">
+      <div class="login-brand">KHANDELWAL FOOD MART</div>
+      <div class="login-sub">Price & Stock Check Portal</div>
+
+      <input type="tel" id="loginPhone" class="input-phone" placeholder="Mobile Number" maxlength="10" />
+      <button class="btn-login" onclick="handleLogin()">Login Karein</button>
+    </div>
+  </div>
+
+  <!-- 2. MAIN APP -->
+  <div id="appScreen">
+    <header>
+      <div class="brand-title">KHANDELWAL FOOD MART</div>
+      <div class="user-pill">
+        <span id="roleBadge" class="role-badge">STAFF</span>
+        <button class="btn-logout" onclick="handleLogout()">Exit</button>
+      </div>
+    </header>
+
+    <div class="app-container">
+      <!-- PWA Install Banner -->
+      <div id="installBanner">
+        <span>📲 App ko Phone screen par install karein</span>
+        <button class="btn-install" id="btnInstallApp">Install</button>
+      </div>
+
+      <!-- Admin Upload Slot (Sirf 6204475712 ke liye visible) -->
+      <div class="admin-upload-box" id="adminUploadContainer" style="display: none;">
+        <input type="file" id="adminExcelInput" accept=".xlsx, .xls, .csv">
+        <p style="font-weight: 700; color: #1e3a8a; font-size: 14px;">📁 Marg Stock File (.xls) Upload Karein</p>
+        <p style="font-size: 12px; color: #64748b; margin-top: 3px;">Auto-parses: Product, Barcode, MRP, Purchase, Sale Rate</p>
+      </div>
+
+      <!-- Search & Camera Barcode -->
+      <div class="search-row">
+        <input type="text" id="productSearchInput" class="search-input" placeholder="Product search ya Barcode scan karein..." autocomplete="off" />
+        <button class="btn-scan-camera" onclick="openCameraScanner()">📷</button>
+        <div class="results-dropdown" id="searchResultsDropdown"></div>
+      </div>
+
+      <div style="font-size: 12px; color: #64748b; display: flex; justify-content: space-between; padding: 0 4px;">
+        <span>Loaded Items: <strong id="totalCountSpan">0</strong></span>
+        <span id="fileStatus">Offline Storage Ready</span>
+      </div>
+
+      <!-- Display Card -->
+      <div class="detail-card" id="productDetailCard">
+        <div class="product-title-large" id="cardTitle">PRODUCT NAME</div>
+        <div class="product-barcode-pill" id="cardBarcode">BARCODE: --</div>
+
+        <div class="pricing-grid">
+          <div class="price-box box-sale">
+            <span class="price-label">Sale Rate</span>
+            <div class="price-value val-sale">₹<span id="cardSale">0</span></div>
+          </div>
+
+          <div class="price-box box-mrp">
+            <span class="price-label">M.R.P.</span>
+            <div class="price-value val-mrp">₹<span id="cardMrp">0</span></div>
+          </div>
+
+          <!-- Purchase Rate & Margin (Sirf Owner & Admin) -->
+          <div class="price-box box-purchase owner-exclusive" style="display: none;">
+            <span class="price-label">Purchase Rate (Cost)</span>
+            <div class="price-value val-purchase">₹<span id="cardPurchase">0</span></div>
+          </div>
+
+          <div class="price-box box-margin owner-exclusive" style="display: none;">
+            <span class="price-label">Gross Margin</span>
+            <div class="price-value val-margin"><span id="cardMargin">0</span>%</div>
+          </div>
+        </div>
+
+        <div id="savingHighlight" style="font-size: 13px; font-weight: 700; color: #15803d; text-align: center; margin-top: 10px;"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Camera Barcode Scanner Modal -->
+  <div id="scannerModal">
+    <div style="width: 100%; max-width: 380px; border-radius: 12px; overflow: hidden; background: #000;">
+      <div id="reader" style="width: 100%;"></div>
+    </div>
+    <button class="btn-close-modal" style="margin-top: 16px; background: white; padding: 10px 24px;" onclick="closeCameraScanner()">Cancel</button>
+  </div>
+
+  <!-- Multiple MRP Selection Modal -->
+  <div class="modal-backdrop" id="mrpModalBackdrop">
+    <div class="modal-box">
+      <h3 style="font-size: 16px; font-weight: 800; color: #0f172a;" id="mrpModalTitle">Select Batch / MRP</h3>
+      <p style="font-size: 12px; color: #64748b; margin-top: 4px;">Is product ki multiple MRPs mili hain:</p>
+      <div class="mrp-options-list" id="mrpOptionsList"></div>
+      <button class="btn-close-modal" onclick="closeMrpModal()">Cancel</button>
+    </div>
+  </div>
+
+  <script>
+    // ---------------- PWA SERVICE WORKER REGISTRATION ----------------
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js').catch(err => console.log('SW registration failed:', err));
+      });
+    }
+
+    let deferredPrompt;
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault();
+      deferredPrompt = e;
+      document.getElementById('installBanner').style.display = 'flex';
+    });
+
+    document.getElementById('btnInstallApp').addEventListener('click', async () => {
+      if (deferredPrompt) {
+        deferredPrompt.prompt();
+        const { outcome } = await deferredPrompt.userChoice;
+        if (outcome === 'accepted') {
+          document.getElementById('installBanner').style.display = 'none';
+        }
+        deferredPrompt = null;
+      }
+    });
+
+    // ---------------- INDEXEDDB STORAGE (Supports 50,000+ Items) ----------------
+    const IDB_NAME = 'KFM_StockDB';
+    const IDB_STORE = 'products';
+    let dbInstance = null;
+
+    function initDB() {
+      return new Promise((resolve, reject) => {
+        const req = indexedDB.open(IDB_NAME, 1);
+        req.onupgradeneeded = (e) => {
+          const db = e.target.result;
+          if (!db.objectStoreNames.contains(IDB_STORE)) {
+            db.createObjectStore(IDB_STORE, { keyPath: 'id', autoIncrement: true });
+          }
+        };
+        req.onsuccess = (e) => {
+          dbInstance = e.target.result;
+          resolve(dbInstance);
+        };
+        req.onerror = (e) => reject(e);
+      });
+    }
+
+    function saveProductsToIDB(items) {
+      return new Promise((resolve, reject) => {
+        const tx = dbInstance.transaction(IDB_STORE, 'readwrite');
+        const store = tx.objectStore(IDB_STORE);
+        store.clear(); // Purana stock clear karein
+        items.forEach(item => store.add(item));
+        tx.oncomplete = () => resolve();
+        tx.onerror = (e) => reject(e);
+      });
+    }
+
+    function loadProductsFromIDB() {
+      return new Promise((resolve, reject) => {
+        const tx = dbInstance.transaction(IDB_STORE, 'readonly');
+        const store = tx.objectStore(IDB_STORE);
+        const req = store.getAll();
+        req.onsuccess = () => resolve(req.result || []);
+        req.onerror = (e) => reject(e);
+      });
+    }
+
+    // ---------------- CONFIG & AUTHENTICATION ----------------
+    const ADMIN_MASTER_PHONE = "6204475712"; // File upload access
+    const OWNER_PHONES = ["6204475712", "9334493680"]; // Purchase rate access
+    const SESSION_USER_KEY = "KFM_ACTIVE_USER";
+
+    let currentUser = null;
+    let productsDatabase = [];
+    let html5QrScanner = null;
+
+    window.addEventListener('DOMContentLoaded', async () => {
+      await initDB();
+      
+      const storedPhone = localStorage.getItem(SESSION_USER_KEY);
+      if (storedPhone) setupUserSession(storedPhone);
+
+      // Load products from IndexedDB
+      productsDatabase = await loadProductsFromIDB();
+      document.getElementById('totalCountSpan').innerText = productsDatabase.length;
+    });
+
+    function handleLogin() {
+      const phone = document.getElementById('loginPhone').value.trim();
+      if (!/^\d{10}$/.test(phone)) {
+        alert("10 digit ka valid mobile number enter karein.");
+        return;
+      }
+      localStorage.setItem(SESSION_USER_KEY, phone);
+      setupUserSession(phone);
+    }
+
+    function setupUserSession(phone) {
+      currentUser = phone;
+      document.getElementById('loginScreen').style.display = 'none';
+      document.getElementById('appScreen').style.display = 'flex';
+
+      const roleBadge = document.getElementById('roleBadge');
+      const adminUploadContainer = document.getElementById('adminUploadContainer');
+      const ownerElements = document.querySelectorAll('.owner-exclusive');
+
+      const isOwner = OWNER_PHONES.includes(phone);
+      const isMasterAdmin = (phone === ADMIN_MASTER_PHONE);
+
+      if (isOwner) {
+        roleBadge.className = "role-badge role-owner";
+        roleBadge.innerText = (phone === ADMIN_MASTER_PHONE) ? "ADMIN (OWNER)" : "OWNER";
+        ownerElements.forEach(el => el.style.display = "flex");
+      } else {
+        roleBadge.className = "role-badge role-staff";
+        roleBadge.innerText = "STAFF MODE";
+        ownerElements.forEach(el => el.style.display = "none");
+      }
+
+      adminUploadContainer.style.display = isMasterAdmin ? "block" : "none";
+      document.getElementById('productSearchInput').focus();
+    }
+
+    function handleLogout() {
+      localStorage.removeItem(SESSION_USER_KEY);
+      currentUser = null;
+      document.getElementById('appScreen').style.display = 'none';
+      document.getElementById('loginScreen').style.display = 'flex';
+      document.getElementById('loginPhone').value = "";
+    }
+
+    // ---------------- MARG SHEET PARSER ----------------
+    document.getElementById('adminExcelInput').addEventListener('change', function(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      document.getElementById('fileStatus').innerText = "Processing Marg Sheet...";
+
+      const reader = new FileReader();
+      reader.onload = async function(evt) {
+        try {
+          const data = new Uint8Array(evt.target.result);
+          const workbook = XLSX.read(data, { type: 'array' });
+          const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+          const sheetRows = XLSX.utils.sheet_to_json(firstSheet, { header: 1, defval: "" });
+
+          await parseTargetedMargSheet(sheetRows);
+        } catch (err) {
+          alert("File read error: " + err.message);
+          document.getElementById('fileStatus').innerText = "Error reading file";
+        }
+      };
+      reader.readAsArrayBuffer(file);
+    });
+
+    async function parseTargetedMargSheet(rows) {
+      let headerRowIndex = -1;
+      let colName = 1, colMrp = 10, colPur = 11, colSale = 12, colBarcode = 23;
+
+      for (let r = 0; r < Math.min(rows.length, 15); r++) {
+        const row = rows[r];
+        for (let c = 0; c < row.length; c++) {
+          const val = String(row[c]).trim().toLowerCase();
+          if (val === 'product name') {
+            headerRowIndex = r;
+            break;
+          }
+        }
+        if (headerRowIndex !== -1) break;
+      }
+
+      if (headerRowIndex !== -1) {
+        const headers = rows[headerRowIndex];
+        for (let c = 0; c < headers.length; c++) {
+          const h = String(headers[c]).trim().toLowerCase();
+          if (h === 'product name') colName = c;
+          else if (h === 'm.r.p.' || h === 'mrp') colMrp = c;
+          else if (h === 'purchase price' || h === 'purc. price') colPur = c;
+          else if (h === 'sales price' || h === 'sale price') colSale = c;
+          else if (h === 'barcode') colBarcode = c;
+        }
+      } else {
+        headerRowIndex = 2;
+      }
+
+      const parsedItems = [];
+      const startRow = headerRowIndex + 1;
+
+      for (let r = startRow; r < rows.length; r++) {
+        const row = rows[r];
+        if (!row || row.length === 0) continue;
+
+        let name = String(row[colName] || "").trim();
+        if (!name || name === "Product Name" || name === "Deal" || name === "Free" || name === "nan") continue;
+
+        let barcode = String(row[colBarcode] || "").trim();
+        if (barcode === "nan") barcode = "";
+
+        let mrp = parseFloat(String(row[colMrp]).replace(/[^0-9.]/g, '')) || 0;
+        let pur = parseFloat(String(row[colPur]).replace(/[^0-9.]/g, '')) || 0;
+        let sale = parseFloat(String(row[colSale]).replace(/[^0-9.]/g, '')) || mrp;
+
+        if (mrp === 0 && sale > 0) mrp = sale;
+
+        if (mrp > 0 || sale > 0 || pur > 0) {
+          parsedItems.push({
+            name: name,
+            barcode: barcode,
+            mrp: mrp,
+            purchasePrice: pur,
+            salePrice: sale
+          });
+        }
+      }
+
+      if (parsedItems.length > 0) {
+        productsDatabase = parsedItems;
+        await saveProductsToIDB(productsDatabase);
+        document.getElementById('totalCountSpan').innerText = productsDatabase.length;
+        document.getElementById('fileStatus').innerText = "Offline Storage: Active";
+        alert(`Success! Marg file se ${productsDatabase.length} items phone memory me permanently save ho gaye.`);
+      } else {
+        alert("Valid product data nahi mila.");
+        document.getElementById('fileStatus').innerText = "Failed";
+      }
+    }
+
+    // ---------------- SEARCH & MODAL LOGIC ----------------
+    const searchInput = document.getElementById('productSearchInput');
+    const dropdown = document.getElementById('searchResultsDropdown');
+
+    searchInput.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') {
+        const q = this.value.trim().toLowerCase();
+        if (!q) return;
+
+        const barcodeMatch = productsDatabase.filter(p => p.barcode && p.barcode.toLowerCase() === q);
+        if (barcodeMatch.length > 0) {
+          handleProductMatch(barcodeMatch[0].name);
+          return;
+        }
+
+        const exactMatches = productsDatabase.filter(p => p.name.toLowerCase() === q);
+        if (exactMatches.length > 0) {
+          handleProductMatch(exactMatches[0].name);
+          return;
+        }
+
+        const partial = productsDatabase.find(p => 
+          (p.barcode && p.barcode.toLowerCase().includes(q)) || p.name.toLowerCase().includes(q)
+        );
+        if (partial) {
+          handleProductMatch(partial.name);
+        }
+      }
+    });
+
+    searchInput.addEventListener('input', function() {
+      const q = this.value.trim().toLowerCase();
+      dropdown.innerHTML = "";
+
+      if (q.length < 2) {
+        dropdown.style.display = "none";
+        return;
+      }
+
+      const matchMap = new Map();
+      for (let i = 0; i < productsDatabase.length; i++) {
+        const p = productsDatabase[i];
+        if (p.name.toLowerCase().includes(q) || (p.barcode && p.barcode.toLowerCase().includes(q))) {
+          if (!matchMap.has(p.name)) matchMap.set(p.name, []);
+          matchMap.get(p.name).push(p);
+          if (matchMap.size >= 25) break;
+        }
+      }
+
+      if (matchMap.size === 0) {
+        dropdown.style.display = "none";
+        return;
+      }
+
+      const isOwner = OWNER_PHONES.includes(currentUser);
+
+      matchMap.forEach((variants, name) => {
+        const item = variants[0];
+        const row = document.createElement('div');
+        row.className = 'result-item';
+
+        let meta = variants.length > 1 
+          ? `<span style="color:#d97706; font-weight:700;">[${variants.length} Batches/MRPs]</span>` 
+          : `M.R.P: ₹${item.mrp} | Rate: ₹${item.salePrice}`;
+
+        if (isOwner && variants.length === 1 && item.purchasePrice > 0) {
+          meta += ` | <span style="color:#dc2626; font-weight:700;">Cost: ₹${item.purchasePrice}</span>`;
+        }
+
+        row.innerHTML = `
+          <div class="res-name">${name}</div>
+          <div class="res-meta">${meta}</div>
+        `;
+        row.onclick = () => handleProductMatch(name);
+        dropdown.appendChild(row);
+      });
+
+      dropdown.style.display = "block";
+    });
+
+    function handleProductMatch(productName) {
+      dropdown.style.display = "none";
+      searchInput.value = "";
+      const variants = productsDatabase.filter(p => p.name.toLowerCase() === productName.toLowerCase());
+
+      if (variants.length === 0) return;
+
+      if (variants.length === 1) {
+        renderProductCard(variants[0]);
+      } else {
+        openMrpModal(productName, variants);
+      }
+    }
+
+    function openMrpModal(productName, variants) {
+      document.getElementById('mrpModalTitle').innerText = productName;
+      const list = document.getElementById('mrpOptionsList');
+      list.innerHTML = "";
+
+      const isOwner = OWNER_PHONES.includes(currentUser);
+
+      variants.forEach(v => {
+        const card = document.createElement('div');
+        card.className = 'mrp-option-card';
+
+        let purchaseHtml = "";
+        if (isOwner && v.purchasePrice > 0) {
+          const margin = v.salePrice > v.purchasePrice ? (((v.salePrice - v.purchasePrice) / v.salePrice) * 100).toFixed(1) : 0;
+          purchaseHtml = `<div style="font-size:12px; color:#b91c1c; font-weight:700; margin-top:4px;">Purchase Rate: ₹${v.purchasePrice} (Margin: ${margin}%)</div>`;
+        }
+
+        card.innerHTML = `
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <div>
+              <div style="font-size:17px; font-weight:800; color:#1d4ed8;">Sale: ₹${v.salePrice}</div>
+              <div style="font-size:13px; color:#64748b;">M.R.P.: ₹${v.mrp}</div>
+            </div>
+            <div style="text-align:right;">
+              <span style="font-size:11px; background:#e2e8f0; padding:2px 6px; border-radius:4px; font-weight:600;">Barcode: ${v.barcode || 'N/A'}</span>
+            </div>
+          </div>
+          ${purchaseHtml}
+        `;
+
+        card.onclick = () => {
+          closeMrpModal();
+          renderProductCard(v);
+        };
+        list.appendChild(card);
+      });
+
+      document.getElementById('mrpModalBackdrop').style.display = "flex";
+    }
+
+    function closeMrpModal() {
+      document.getElementById('mrpModalBackdrop').style.display = "none";
+    }
+
+    function renderProductCard(item) {
+      document.getElementById('cardTitle').innerText = item.name;
+      document.getElementById('cardBarcode').innerText = `BARCODE: ${item.barcode || 'N/A'}`;
+      document.getElementById('cardSale').innerText = item.salePrice;
+      document.getElementById('cardMrp').innerText = item.mrp;
+
+      const isOwner = OWNER_PHONES.includes(currentUser);
+      const ownerElements = document.querySelectorAll('.owner-exclusive');
+
+      if (isOwner) {
+        ownerElements.forEach(el => el.style.display = "flex");
+        document.getElementById('cardPurchase').innerText = item.purchasePrice || 0;
+
+        if (item.salePrice > 0 && item.purchasePrice > 0) {
+          const margin = (((item.salePrice - item.purchasePrice) / item.salePrice) * 100).toFixed(1);
+          document.getElementById('cardMargin').innerText = margin;
+        } else {
+          document.getElementById('cardMargin').innerText = "0";
+        }
+      } else {
+        ownerElements.forEach(el => el.style.display = "none");
+      }
+
+      const diff = item.mrp - item.salePrice;
+      document.getElementById('savingHighlight').innerText = diff > 0 ? `Customer Savings: ₹${diff.toFixed(1)} off on MRP` : "";
+      document.getElementById('productDetailCard').style.display = "block";
+    }
+
+    // ---------------- CAMERA BARCODE SCANNER ----------------
+    function openCameraScanner() {
+      document.getElementById('scannerModal').style.display = "flex";
+      html5QrScanner = new Html5Qrcode("reader");
+
+      html5QrScanner.start(
+        { facingMode: "environment" },
+        { fps: 15, qrbox: { width: 250, height: 160 } },
+        (decodedText) => {
+          closeCameraScanner();
+          const q = decodedText.trim().toLowerCase();
+          const matches = productsDatabase.filter(p => p.barcode && p.barcode.toLowerCase() === q);
+          if (matches.length > 0) {
+            handleProductMatch(matches[0].name);
+          } else {
+            alert("Scanned Barcode: " + decodedText + " stock me nahi mila.");
+          }
+        },
+        () => {}
+      ).catch(err => {
+        alert("Camera error: " + err);
+        closeCameraScanner();
+      });
+    }
+
+    function closeCameraScanner() {
+      if (html5QrScanner) {
+        html5QrScanner.stop().then(() => {
+          html5QrScanner.clear();
+          document.getElementById('scannerModal').style.display = "none";
+        }).catch(() => {
+          document.getElementById('scannerModal').style.display = "none";
+        });
+      } else {
+        document.getElementById('scannerModal').style.display = "none";
+      }
+    }
+  </script>
+</body>
+</html>
