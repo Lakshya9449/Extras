@@ -16,6 +16,10 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
 
+  <!-- Firebase Compat SDKs -->
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+
   <style>
     * {
       box-sizing: border-box;
@@ -32,7 +36,7 @@
       flex-direction: column;
     }
 
-    /* ---------------- LOGIN ---------------- */
+    /* ---------------- LOGIN SCREEN ---------------- */
     #loginScreen {
       display: flex;
       flex-direction: column;
@@ -95,7 +99,7 @@
       cursor: pointer;
     }
 
-    /* ---------------- APP UI ---------------- */
+    /* ---------------- MAIN APP SCREEN ---------------- */
     #appScreen {
       display: none;
       flex-direction: column;
@@ -166,29 +170,6 @@
       gap: 14px;
     }
 
-    /* PWA Install Banner */
-    #installBanner {
-      display: none;
-      background: #2563eb;
-      color: white;
-      padding: 12px 16px;
-      border-radius: 10px;
-      justify-content: space-between;
-      align-items: center;
-      font-size: 13px;
-      font-weight: 600;
-    }
-
-    .btn-install {
-      background: white;
-      color: #2563eb;
-      border: none;
-      padding: 6px 14px;
-      border-radius: 6px;
-      font-weight: 700;
-      cursor: pointer;
-    }
-
     /* Admin Upload Box */
     .admin-upload-box {
       background: #eff6ff;
@@ -210,7 +191,7 @@
       cursor: pointer;
     }
 
-    /* Search & Scan Controls */
+    /* Search & Scanner Input */
     .search-row {
       display: flex;
       gap: 8px;
@@ -434,17 +415,11 @@
     </header>
 
     <div class="app-container">
-      <!-- PWA Install Banner -->
-      <div id="installBanner">
-        <span>📲 App ko Phone screen par install karein</span>
-        <button class="btn-install" id="btnInstallApp">Install</button>
-      </div>
-
       <!-- Admin Upload Slot (Sirf 6204475712 ke liye visible) -->
       <div class="admin-upload-box" id="adminUploadContainer" style="display: none;">
         <input type="file" id="adminExcelInput" accept=".xlsx, .xls, .csv">
         <p style="font-weight: 700; color: #1e3a8a; font-size: 14px;">📁 Marg Stock File (.xls) Upload Karein</p>
-        <p style="font-size: 12px; color: #64748b; margin-top: 3px;">Auto-parses: Product, Barcode, MRP, Purchase, Sale Rate</p>
+        <p style="font-size: 12px; color: #64748b; margin-top: 3px;">Upload hote hi sabhi staff ke mobile me auto-sync ho jayega</p>
       </div>
 
       <!-- Search & Camera Barcode -->
@@ -456,7 +431,7 @@
 
       <div style="font-size: 12px; color: #64748b; display: flex; justify-content: space-between; padding: 0 4px;">
         <span>Loaded Items: <strong id="totalCountSpan">0</strong></span>
-        <span id="fileStatus">Offline Storage Ready</span>
+        <span id="fileStatus">Connecting to Cloud...</span>
       </div>
 
       <!-- Display Card -->
@@ -465,6 +440,7 @@
         <div class="product-barcode-pill" id="cardBarcode">BARCODE: --</div>
 
         <div class="pricing-grid">
+          <!-- Staff & Owner Dono ko Dikhega -->
           <div class="price-box box-sale">
             <span class="price-label">Sale Rate</span>
             <div class="price-value val-sale">₹<span id="cardSale">0</span></div>
@@ -475,7 +451,7 @@
             <div class="price-value val-mrp">₹<span id="cardMrp">0</span></div>
           </div>
 
-          <!-- Purchase Rate & Margin (Sirf Owner & Admin) -->
+          <!-- Purchase Rate & Margin (Sirf 6204475712 aur 9334493680 ko dikhega) -->
           <div class="price-box box-purchase owner-exclusive" style="display: none;">
             <span class="price-label">Purchase Rate (Cost)</span>
             <div class="price-value val-purchase">₹<span id="cardPurchase">0</span></div>
@@ -511,93 +487,83 @@
   </div>
 
   <script>
-    // ---------------- PWA SERVICE WORKER REGISTRATION ----------------
-    if ('serviceWorker' in navigator) {
-      window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./sw.js').catch(err => console.log('SW registration failed:', err));
-      });
-    }
+    // ==========================================
+    // 1. FIREBASE INITIALIZATION WITH YOUR KEYS
+    // ==========================================
+    const firebaseConfig = {
+      apiKey: "AIzaSyBbcSNKzxHeNuICi1Mjtp2hDsXQ0-bXnj8",
+      authDomain: "extras-2aa2d.firebaseapp.com",
+      projectId: "extras-2aa2d",
+      storageBucket: "extras-2aa2d.firebasestorage.app",
+      messagingSenderId: "24419126832",
+      appId: "1:24419126832:web:a8e81efad5dbc0dc36e7f5"
+    };
 
-    let deferredPrompt;
-    window.addEventListener('beforeinstallprompt', (e) => {
-      e.preventDefault();
-      deferredPrompt = e;
-      document.getElementById('installBanner').style.display = 'flex';
-    });
+    firebase.initializeApp(firebaseConfig);
+    const firestore = firebase.firestore();
 
-    document.getElementById('btnInstallApp').addEventListener('click', async () => {
-      if (deferredPrompt) {
-        deferredPrompt.prompt();
-        const { outcome } = await deferredPrompt.userChoice;
-        if (outcome === 'accepted') {
-          document.getElementById('installBanner').style.display = 'none';
-        }
-        deferredPrompt = null;
-      }
-    });
-
-    // ---------------- INDEXEDDB STORAGE (Supports 50,000+ Items) ----------------
-    const IDB_NAME = 'KFM_StockDB';
-    const IDB_STORE = 'products';
-    let dbInstance = null;
-
-    function initDB() {
-      return new Promise((resolve, reject) => {
-        const req = indexedDB.open(IDB_NAME, 1);
-        req.onupgradeneeded = (e) => {
-          const db = e.target.result;
-          if (!db.objectStoreNames.contains(IDB_STORE)) {
-            db.createObjectStore(IDB_STORE, { keyPath: 'id', autoIncrement: true });
-          }
-        };
-        req.onsuccess = (e) => {
-          dbInstance = e.target.result;
-          resolve(dbInstance);
-        };
-        req.onerror = (e) => reject(e);
-      });
-    }
-
-    function saveProductsToIDB(items) {
-      return new Promise((resolve, reject) => {
-        const tx = dbInstance.transaction(IDB_STORE, 'readwrite');
-        const store = tx.objectStore(IDB_STORE);
-        store.clear(); // Purana stock clear karein
-        items.forEach(item => store.add(item));
-        tx.oncomplete = () => resolve();
-        tx.onerror = (e) => reject(e);
-      });
-    }
-
-    function loadProductsFromIDB() {
-      return new Promise((resolve, reject) => {
-        const tx = dbInstance.transaction(IDB_STORE, 'readonly');
-        const store = tx.objectStore(IDB_STORE);
-        const req = store.getAll();
-        req.onsuccess = () => resolve(req.result || []);
-        req.onerror = (e) => reject(e);
-      });
-    }
-
-    // ---------------- CONFIG & AUTHENTICATION ----------------
-    const ADMIN_MASTER_PHONE = "6204475712"; // File upload access
-    const OWNER_PHONES = ["6204475712", "9334493680"]; // Purchase rate access
+    // ==========================================
+    // 2. APP CONFIGURATION & AUTH ROLES
+    // ==========================================
+    const ADMIN_MASTER_PHONE = "6204475712"; // Can upload file
+    const OWNER_PHONES = ["6204475712", "9334493680"]; // Can view Purchase Rate
     const SESSION_USER_KEY = "KFM_ACTIVE_USER";
+    const IDB_KEY = "KFM_LOCAL_STOCK_CACHE";
 
     let currentUser = null;
     let productsDatabase = [];
     let html5QrScanner = null;
 
-    window.addEventListener('DOMContentLoaded', async () => {
-      await initDB();
-      
+    // Load offline cached data first for instant start
+    window.addEventListener('DOMContentLoaded', () => {
+      const cached = localStorage.getItem(IDB_KEY);
+      if (cached) {
+        try {
+          productsDatabase = JSON.parse(cached);
+          document.getElementById('totalCountSpan').innerText = productsDatabase.length;
+        } catch(e) {}
+      }
+
       const storedPhone = localStorage.getItem(SESSION_USER_KEY);
       if (storedPhone) setupUserSession(storedPhone);
 
-      // Load products from IndexedDB
-      productsDatabase = await loadProductsFromIDB();
-      document.getElementById('totalCountSpan').innerText = productsDatabase.length;
+      // Listen for Live Cloud Updates across all devices
+      listenToCloudStockUpdates();
     });
+
+    // Real-Time Cloud Listener for Staff & Owner devices
+    function listenToCloudStockUpdates() {
+      firestore.collection("kfm_stock").doc("meta")
+        .onSnapshot(async (doc) => {
+          if (doc.exists) {
+            const meta = doc.data();
+            const totalChunks = meta.totalChunks || 1;
+            document.getElementById('fileStatus').innerText = "Syncing with Cloud...";
+
+            const fetchedItems = [];
+            for (let i = 0; i < totalChunks; i++) {
+              const chunkDoc = await firestore.collection("kfm_stock").doc(`chunk_${i}`).get();
+              if (chunkDoc.exists && chunkDoc.data().itemsJson) {
+                const chunkList = JSON.parse(chunkDoc.data().itemsJson);
+                fetchedItems.push(...chunkList);
+              }
+            }
+
+            if (fetchedItems.length > 0) {
+              productsDatabase = fetchedItems;
+              try {
+                localStorage.setItem(IDB_KEY, JSON.stringify(productsDatabase));
+              } catch(e) {}
+              document.getElementById('totalCountSpan').innerText = productsDatabase.length;
+              document.getElementById('fileStatus').innerText = "Cloud Synced";
+            }
+          } else {
+            document.getElementById('fileStatus').innerText = "Ready (No Cloud Data)";
+          }
+        }, (err) => {
+          document.getElementById('fileStatus').innerText = "Offline Mode";
+        });
+    }
 
     function handleLogin() {
       const phone = document.getElementById('loginPhone').value.trim();
@@ -643,7 +609,9 @@
       document.getElementById('loginPhone').value = "";
     }
 
-    // ---------------- MARG SHEET PARSER ----------------
+    // ==========================================
+    // 3. ADMIN FILE PARSER & SMART CLOUD CHUNKER
+    // ==========================================
     document.getElementById('adminExcelInput').addEventListener('change', function(e) {
       const file = e.target.files[0];
       if (!file) return;
@@ -658,7 +626,7 @@
           const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
           const sheetRows = XLSX.utils.sheet_to_json(firstSheet, { header: 1, defval: "" });
 
-          await parseTargetedMargSheet(sheetRows);
+          await uploadMargDataToCloud(sheetRows);
         } catch (err) {
           alert("File read error: " + err.message);
           document.getElementById('fileStatus').innerText = "Error reading file";
@@ -667,9 +635,9 @@
       reader.readAsArrayBuffer(file);
     });
 
-    async function parseTargetedMargSheet(rows) {
-      let headerRowIndex = -1;
+    async function uploadMargDataToCloud(rows) {
       let colName = 1, colMrp = 10, colPur = 11, colSale = 12, colBarcode = 23;
+      let headerRowIndex = 2; // Marg structure default
 
       for (let r = 0; r < Math.min(rows.length, 15); r++) {
         const row = rows[r];
@@ -680,36 +648,18 @@
             break;
           }
         }
-        if (headerRowIndex !== -1) break;
-      }
-
-      if (headerRowIndex !== -1) {
-        const headers = rows[headerRowIndex];
-        for (let c = 0; c < headers.length; c++) {
-          const h = String(headers[c]).trim().toLowerCase();
-          if (h === 'product name') colName = c;
-          else if (h === 'm.r.p.' || h === 'mrp') colMrp = c;
-          else if (h === 'purchase price' || h === 'purc. price') colPur = c;
-          else if (h === 'sales price' || h === 'sale price') colSale = c;
-          else if (h === 'barcode') colBarcode = c;
-        }
-      } else {
-        headerRowIndex = 2;
+        if (headerRowIndex !== 2) break;
       }
 
       const parsedItems = [];
-      const startRow = headerRowIndex + 1;
-
-      for (let r = startRow; r < rows.length; r++) {
+      for (let r = headerRowIndex + 1; r < rows.length; r++) {
         const row = rows[r];
         if (!row || row.length === 0) continue;
 
         let name = String(row[colName] || "").trim();
         if (!name || name === "Product Name" || name === "Deal" || name === "Free" || name === "nan") continue;
 
-        let barcode = String(row[colBarcode] || "").trim();
-        if (barcode === "nan") barcode = "";
-
+        let barcode = String(row[colBarcode] || "").trim().replace("nan", "");
         let mrp = parseFloat(String(row[colMrp]).replace(/[^0-9.]/g, '')) || 0;
         let pur = parseFloat(String(row[colPur]).replace(/[^0-9.]/g, '')) || 0;
         let sale = parseFloat(String(row[colSale]).replace(/[^0-9.]/g, '')) || mrp;
@@ -727,19 +677,37 @@
         }
       }
 
-      if (parsedItems.length > 0) {
-        productsDatabase = parsedItems;
-        await saveProductsToIDB(productsDatabase);
-        document.getElementById('totalCountSpan').innerText = productsDatabase.length;
-        document.getElementById('fileStatus').innerText = "Offline Storage: Active";
-        alert(`Success! Marg file se ${productsDatabase.length} items phone memory me permanently save ho gaye.`);
-      } else {
+      if (parsedItems.length === 0) {
         alert("Valid product data nahi mila.");
-        document.getElementById('fileStatus').innerText = "Failed";
+        return;
       }
+
+      document.getElementById('fileStatus').innerText = `Uploading ${parsedItems.length} items to Cloud...`;
+
+      // Split into 5000-item chunks to strictly stay below 1MB Firestore limit
+      const CHUNK_SIZE = 5000;
+      const totalChunks = Math.ceil(parsedItems.length / CHUNK_SIZE);
+
+      for (let i = 0; i < totalChunks; i++) {
+        const chunk = parsedItems.slice(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE);
+        await firestore.collection("kfm_stock").doc(`chunk_${i}`).set({
+          itemsJson: JSON.stringify(chunk)
+        });
+      }
+
+      // Update metadata to trigger instant auto-sync across all staff devices
+      await firestore.collection("kfm_stock").doc("meta").set({
+        totalCount: parsedItems.length,
+        totalChunks: totalChunks,
+        updatedAt: new Date().toISOString()
+      });
+
+      alert(`Success! Marg file se ${parsedItems.length} products cloud par upload ho gaye. Ab sabhi staff phones me yeh data bina reload kiye automatically load ho jayega.`);
     }
 
-    // ---------------- SEARCH & MODAL LOGIC ----------------
+    // ==========================================
+    // 4. SEARCH & SELECTION WORKFLOW
+    // ==========================================
     const searchInput = document.getElementById('productSearchInput');
     const dropdown = document.getElementById('searchResultsDropdown');
 
@@ -905,7 +873,9 @@
       document.getElementById('productDetailCard').style.display = "block";
     }
 
-    // ---------------- CAMERA BARCODE SCANNER ----------------
+    // ==========================================
+    // 5. CAMERA SCANNER
+    // ==========================================
     function openCameraScanner() {
       document.getElementById('scannerModal').style.display = "flex";
       html5QrScanner = new Html5Qrcode("reader");
