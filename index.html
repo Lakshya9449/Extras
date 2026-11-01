@@ -70,7 +70,7 @@
       margin-bottom: 22px;
     }
 
-    .input-phone {
+    .input-field {
       width: 100%;
       padding: 14px 16px;
       font-size: 18px;
@@ -83,7 +83,7 @@
       outline: none;
     }
 
-    .input-phone:focus {
+    .input-field:focus {
       border-color: #2563eb;
     }
 
@@ -399,8 +399,16 @@
       <div class="login-brand">KHANDELWAL FOOD MART</div>
       <div class="login-sub">Price & Stock Check Portal</div>
 
-      <input type="tel" id="loginPhone" class="input-phone" placeholder="Mobile Number" maxlength="10" />
-      <button class="btn-login" onclick="handleLogin()">Login Karein</button>
+      <!-- Phone Input -->
+      <input type="tel" id="loginPhone" class="input-field" placeholder="Mobile Number" maxlength="10" />
+      
+      <!-- Owner Password Slot (Only shows if owner number is entered) -->
+      <div id="passwordWrapper" style="display: none; margin-bottom: 4px;">
+        <p style="font-size: 12px; font-weight: 700; color: #b91c1c; margin-bottom: 6px;">Owner Detected - Enter Password</p>
+        <input type="password" id="ownerPassword" class="input-field" placeholder="Enter PIN" maxlength="10" />
+      </div>
+
+      <button class="btn-login" id="btnLogin" onclick="handleLogin()">Login Karein</button>
     </div>
   </div>
 
@@ -451,7 +459,7 @@
             <div class="price-value val-mrp">₹<span id="cardMrp">0</span></div>
           </div>
 
-          <!-- Purchase Rate & Margin (Sirf 6204475712 aur 9334493680 ko dikhega) -->
+          <!-- Purchase Rate & Margin (Sirf Password Verified Owners ko dikhega) -->
           <div class="price-box box-purchase owner-exclusive" style="display: none;">
             <span class="price-label">Purchase Rate (Cost)</span>
             <div class="price-value val-purchase">₹<span id="cardPurchase">0</span></div>
@@ -488,7 +496,7 @@
 
   <script>
     // ==========================================
-    // 1. FIREBASE INITIALIZATION WITH YOUR KEYS
+    // 1. FIREBASE INITIALIZATION
     // ==========================================
     const firebaseConfig = {
       apiKey: "AIzaSyBbcSNKzxHeNuICi1Mjtp2hDsXQ0-bXnj8",
@@ -503,18 +511,37 @@
     const firestore = firebase.firestore();
 
     // ==========================================
-    // 2. APP CONFIGURATION & AUTH ROLES
+    // 2. CONFIGURATION, AUTH & PASSWORD RULES
     // ==========================================
-    const ADMIN_MASTER_PHONE = "6204475712"; // Can upload file
-    const OWNER_PHONES = ["6204475712", "9334493680"]; // Can view Purchase Rate
+    const ADMIN_MASTER_PHONE = "6204475712"; // Lakshya (Master Admin)
+    const OWNER_PHONES = ["6204475712", "9334493680"]; // Lakshya & Papa
+    const REQUIRED_OWNER_PIN = "1234"; // Security PIN for owner access
+
     const SESSION_USER_KEY = "KFM_ACTIVE_USER";
+    const SESSION_AUTH_ROLE = "KFM_ACTIVE_ROLE";
     const IDB_KEY = "KFM_LOCAL_STOCK_CACHE";
 
     let currentUser = null;
+    let isOwnerVerified = false;
     let productsDatabase = [];
     let html5QrScanner = null;
 
-    // Load offline cached data first for instant start
+    // Detect owner number while typing
+    const phoneInput = document.getElementById('loginPhone');
+    const passwordWrapper = document.getElementById('passwordWrapper');
+    const ownerPasswordInput = document.getElementById('ownerPassword');
+
+    phoneInput.addEventListener('input', function() {
+      const val = this.value.trim();
+      if (OWNER_PHONES.includes(val)) {
+        passwordWrapper.style.display = "block";
+        ownerPasswordInput.focus();
+      } else {
+        passwordWrapper.style.display = "none";
+        ownerPasswordInput.value = "";
+      }
+    });
+
     window.addEventListener('DOMContentLoaded', () => {
       const cached = localStorage.getItem(IDB_KEY);
       if (cached) {
@@ -525,13 +552,82 @@
       }
 
       const storedPhone = localStorage.getItem(SESSION_USER_KEY);
-      if (storedPhone) setupUserSession(storedPhone);
+      const storedRole = localStorage.getItem(SESSION_AUTH_ROLE);
+      if (storedPhone) {
+        setupUserSession(storedPhone, storedRole === 'owner');
+      }
 
-      // Listen for Live Cloud Updates across all devices
       listenToCloudStockUpdates();
     });
 
-    // Real-Time Cloud Listener for Staff & Owner devices
+    function handleLogin() {
+      const phone = phoneInput.value.trim();
+      if (!/^\d{10}$/.test(phone)) {
+        alert("10 digit ka valid mobile number enter karein.");
+        return;
+      }
+
+      // Check if Owner
+      if (OWNER_PHONES.includes(phone)) {
+        const pin = ownerPasswordInput.value.trim();
+        if (pin !== REQUIRED_OWNER_PIN) {
+          alert("Galat Password! Kripya sahi owner PIN enter karein.");
+          ownerPasswordInput.focus();
+          return;
+        }
+        localStorage.setItem(SESSION_USER_KEY, phone);
+        localStorage.setItem(SESSION_AUTH_ROLE, 'owner');
+        setupUserSession(phone, true);
+      } else {
+        // Normal Staff login
+        localStorage.setItem(SESSION_USER_KEY, phone);
+        localStorage.setItem(SESSION_AUTH_ROLE, 'staff');
+        setupUserSession(phone, false);
+      }
+    }
+
+    function setupUserSession(phone, isOwner) {
+      currentUser = phone;
+      isOwnerVerified = isOwner;
+
+      document.getElementById('loginScreen').style.display = 'none';
+      document.getElementById('appScreen').style.display = 'flex';
+
+      const roleBadge = document.getElementById('roleBadge');
+      const adminUploadContainer = document.getElementById('adminUploadContainer');
+      const ownerElements = document.querySelectorAll('.owner-exclusive');
+
+      const isMasterAdmin = (phone === ADMIN_MASTER_PHONE && isOwnerVerified);
+
+      if (isOwnerVerified) {
+        roleBadge.className = "role-badge role-owner";
+        roleBadge.innerText = (phone === ADMIN_MASTER_PHONE) ? "ADMIN (OWNER)" : "OWNER";
+        ownerElements.forEach(el => el.style.display = "flex");
+      } else {
+        roleBadge.className = "role-badge role-staff";
+        roleBadge.innerText = "STAFF MODE";
+        ownerElements.forEach(el => el.style.display = "none");
+      }
+
+      adminUploadContainer.style.display = isMasterAdmin ? "block" : "none";
+      document.getElementById('productSearchInput').focus();
+    }
+
+    function handleLogout() {
+      localStorage.removeItem(SESSION_USER_KEY);
+      localStorage.removeItem(SESSION_AUTH_ROLE);
+      currentUser = null;
+      isOwnerVerified = false;
+      document.getElementById('appScreen').style.display = 'none';
+      document.getElementById('loginScreen').style.display = 'flex';
+      phoneInput.value = "";
+      ownerPasswordInput.value = "";
+      passwordWrapper.style.display = "none";
+    }
+
+    // ==========================================
+    // 3. REAL-TIME CLOUD LISTENER
+    // ==========================================
     function listenToCloudStockUpdates() {
       firestore.collection("kfm_stock").doc("meta")
         .onSnapshot(async (doc) => {
@@ -565,52 +661,8 @@
         });
     }
 
-    function handleLogin() {
-      const phone = document.getElementById('loginPhone').value.trim();
-      if (!/^\d{10}$/.test(phone)) {
-        alert("10 digit ka valid mobile number enter karein.");
-        return;
-      }
-      localStorage.setItem(SESSION_USER_KEY, phone);
-      setupUserSession(phone);
-    }
-
-    function setupUserSession(phone) {
-      currentUser = phone;
-      document.getElementById('loginScreen').style.display = 'none';
-      document.getElementById('appScreen').style.display = 'flex';
-
-      const roleBadge = document.getElementById('roleBadge');
-      const adminUploadContainer = document.getElementById('adminUploadContainer');
-      const ownerElements = document.querySelectorAll('.owner-exclusive');
-
-      const isOwner = OWNER_PHONES.includes(phone);
-      const isMasterAdmin = (phone === ADMIN_MASTER_PHONE);
-
-      if (isOwner) {
-        roleBadge.className = "role-badge role-owner";
-        roleBadge.innerText = (phone === ADMIN_MASTER_PHONE) ? "ADMIN (OWNER)" : "OWNER";
-        ownerElements.forEach(el => el.style.display = "flex");
-      } else {
-        roleBadge.className = "role-badge role-staff";
-        roleBadge.innerText = "STAFF MODE";
-        ownerElements.forEach(el => el.style.display = "none");
-      }
-
-      adminUploadContainer.style.display = isMasterAdmin ? "block" : "none";
-      document.getElementById('productSearchInput').focus();
-    }
-
-    function handleLogout() {
-      localStorage.removeItem(SESSION_USER_KEY);
-      currentUser = null;
-      document.getElementById('appScreen').style.display = 'none';
-      document.getElementById('loginScreen').style.display = 'flex';
-      document.getElementById('loginPhone').value = "";
-    }
-
     // ==========================================
-    // 3. ADMIN FILE PARSER & SMART CLOUD CHUNKER
+    // 4. ADMIN MARG FILE UPLOADER & AUTO-CHUNKER
     // ==========================================
     document.getElementById('adminExcelInput').addEventListener('change', function(e) {
       const file = e.target.files[0];
@@ -637,7 +689,7 @@
 
     async function uploadMargDataToCloud(rows) {
       let colName = 1, colMrp = 10, colPur = 11, colSale = 12, colBarcode = 23;
-      let headerRowIndex = 2; // Marg structure default
+      let headerRowIndex = 2;
 
       for (let r = 0; r < Math.min(rows.length, 15); r++) {
         const row = rows[r];
@@ -684,7 +736,6 @@
 
       document.getElementById('fileStatus').innerText = `Uploading ${parsedItems.length} items to Cloud...`;
 
-      // Split into 5000-item chunks to strictly stay below 1MB Firestore limit
       const CHUNK_SIZE = 5000;
       const totalChunks = Math.ceil(parsedItems.length / CHUNK_SIZE);
 
@@ -695,18 +746,17 @@
         });
       }
 
-      // Update metadata to trigger instant auto-sync across all staff devices
       await firestore.collection("kfm_stock").doc("meta").set({
         totalCount: parsedItems.length,
         totalChunks: totalChunks,
         updatedAt: new Date().toISOString()
       });
 
-      alert(`Success! Marg file se ${parsedItems.length} products cloud par upload ho gaye. Ab sabhi staff phones me yeh data bina reload kiye automatically load ho jayega.`);
+      alert(`Success! Marg file se ${parsedItems.length} products cloud par upload ho gaye.`);
     }
 
     // ==========================================
-    // 4. SEARCH & SELECTION WORKFLOW
+    // 5. SEARCH & LOOKUP LOGIC
     // ==========================================
     const searchInput = document.getElementById('productSearchInput');
     const dropdown = document.getElementById('searchResultsDropdown');
@@ -761,8 +811,6 @@
         return;
       }
 
-      const isOwner = OWNER_PHONES.includes(currentUser);
-
       matchMap.forEach((variants, name) => {
         const item = variants[0];
         const row = document.createElement('div');
@@ -772,7 +820,7 @@
           ? `<span style="color:#d97706; font-weight:700;">[${variants.length} Batches/MRPs]</span>` 
           : `M.R.P: ₹${item.mrp} | Rate: ₹${item.salePrice}`;
 
-        if (isOwner && variants.length === 1 && item.purchasePrice > 0) {
+        if (isOwnerVerified && variants.length === 1 && item.purchasePrice > 0) {
           meta += ` | <span style="color:#dc2626; font-weight:700;">Cost: ₹${item.purchasePrice}</span>`;
         }
 
@@ -806,14 +854,12 @@
       const list = document.getElementById('mrpOptionsList');
       list.innerHTML = "";
 
-      const isOwner = OWNER_PHONES.includes(currentUser);
-
       variants.forEach(v => {
         const card = document.createElement('div');
         card.className = 'mrp-option-card';
 
         let purchaseHtml = "";
-        if (isOwner && v.purchasePrice > 0) {
+        if (isOwnerVerified && v.purchasePrice > 0) {
           const margin = v.salePrice > v.purchasePrice ? (((v.salePrice - v.purchasePrice) / v.salePrice) * 100).toFixed(1) : 0;
           purchaseHtml = `<div style="font-size:12px; color:#b91c1c; font-weight:700; margin-top:4px;">Purchase Rate: ₹${v.purchasePrice} (Margin: ${margin}%)</div>`;
         }
@@ -851,10 +897,9 @@
       document.getElementById('cardSale').innerText = item.salePrice;
       document.getElementById('cardMrp').innerText = item.mrp;
 
-      const isOwner = OWNER_PHONES.includes(currentUser);
       const ownerElements = document.querySelectorAll('.owner-exclusive');
 
-      if (isOwner) {
+      if (isOwnerVerified) {
         ownerElements.forEach(el => el.style.display = "flex");
         document.getElementById('cardPurchase').innerText = item.purchasePrice || 0;
 
@@ -874,7 +919,7 @@
     }
 
     // ==========================================
-    // 5. CAMERA SCANNER
+    // 6. CAMERA SCANNER
     // ==========================================
     function openCameraScanner() {
       document.getElementById('scannerModal').style.display = "flex";
